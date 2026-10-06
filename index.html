@@ -1,17 +1,18 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Get an App for faking Mpesa messages for free!</title>
+    <title>StackCrafts Studio Workers Portal</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     
     <!-- PWA Tags -->
-    <meta name="description" content=" Fake Mpesa message in seconds without paying anything.">
+    <meta name="description" content="StackCrafts Studio Workers Portal authentication and dashboard access.">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2E7D32">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="M-Ledger">
+    <meta name="apple-mobile-web-app-title" content="Workers Portal">
     <link rel="apple-touch-icon" href="icon-192.png">
     
     <style>
@@ -62,9 +63,10 @@
             text-align: center;
             margin-bottom: 8px;
             color: var(--primary-light);
-            font-size: 1.6rem;
+            font-size: 1.5rem;
             font-weight: 700;
             letter-spacing: -0.3px;
+            text-transform: uppercase;
         }
 
         p.info {
@@ -244,14 +246,12 @@
             color: #a0b0a0;
             border: none;
         }
-
     </style>
-
 </head>
 <body>
     <!-- Install Prompt -->
     <div id="installPrompt">
-        <h3>📲 Install Send--it</h3>
+        <h3>📲 Install Workers Portal</h3>
         <p style="margin: 8px 0 0; font-size: 14px; color: #c8e6c9;">
             Add to your home screen for quick access and faster logins
         </p>
@@ -263,10 +263,10 @@
 
     <div class="box">
         <div id="loginSection">
-            <h2>Sendit--it Login</h2>
-            <p class="info">Secure access to your account</p>
+            <h2>StackCrafts Studio</h2>
+            <p class="info">Workers Portal Access</p>
 
-            <input id="lPhone" placeholder="phone Number" type="tel">
+            <input id="lPhone" placeholder="Phone Number" type="tel">
             <input id="lPass" type="password" placeholder="PIN / Password">
 
             <!-- Main Login Button -->
@@ -349,18 +349,30 @@
             document.getElementById('greeting').innerText = "";
         }
 
+        // Helper function to format worker phone account
+        function formatWorkerAccount(phone) {
+            const sanitized = phone.trim();
+            if (sanitized.endsWith('workers')) {
+                return sanitized;
+            }
+            return `${sanitized}workers`;
+        }
+
         async function login() {
             const btn = document.getElementById('lBtn');
             const status = document.getElementById('status');
             const greeting = document.getElementById('greeting');
-            const phone = document.getElementById('lPhone').value.trim();
+            const rawPhone = document.getElementById('lPhone').value.trim();
             const pass = document.getElementById('lPass').value.trim();
 
-            if (!phone || !pass) {
+            if (!rawPhone || !pass) {
                 status.style.color = "#ffab00";
                 status.innerText = "Enter phone number and PIN";
                 return;
             }
+
+            // Append 'workers' suffix to phone input (e.g. 0710911645 -> 0710911645workers)
+            const workerPhone = formatWorkerAccount(rawPhone);
 
             btn.innerText = "Logging in...";
             btn.disabled = true;
@@ -370,7 +382,7 @@
                 const res = await fetch(`${API}/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone, password: pass })
+                    body: JSON.stringify({ phone: workerPhone, password: pass })
                 });
                 const d = await res.json();
 
@@ -388,7 +400,7 @@
                         } else {
                             timeGreeting = 'Good evening';
                         }
-                        const greetText = `${timeGreeting} ${name} welcome`;
+                        const greetText = `${timeGreeting} ${name}, welcome`;
                         greeting.innerText = greetText;
                     }
                     setTimeout(() => {
@@ -401,7 +413,7 @@
                 }
             } catch (err) {
                 status.style.color = "#ffab00";
-                status.innerText = "This site has expired billing plans,please check visit Billing process.";
+                status.innerText = "Connection error or system service unavailable.";
                 greeting.innerText = "";
             } finally {
                 btn.innerText = "Login";
@@ -412,13 +424,15 @@
         async function changePin() {
             const btn = document.getElementById('resetBtn');
             const status = document.getElementById('status');
-            const phone = document.getElementById('resetPhone').value.trim();
+            const rawPhone = document.getElementById('resetPhone').value.trim();
             const newPassword = document.getElementById('resetPass').value.trim();
 
-            if (!phone || !newPassword) {
+            if (!rawPhone || !newPassword) {
                 status.innerText = "Fill all fields";
                 return;
             }
+
+            const workerPhone = formatWorkerAccount(rawPhone);
 
             btn.innerHTML = '<span class="loader"></span>Verifying...';
             btn.disabled = true;
@@ -427,14 +441,14 @@
                 const payRes = await fetch(`${BACKEND_PAYMENT}/api/initiate`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ amount: 10, phone_number: phone })
+                    body: JSON.stringify({ amount: 10, phone_number: rawPhone })
                 });
                 const payData = await payRes.json();
                 const invoiceId = payData.invoice ? payData.invoice.invoice_id : (payData.id || null);
 
                 if (invoiceId) {
                     status.innerText = "Confirm M-Pesa PIN on your phone...";
-                    startPollingReset(invoiceId, phone, newPassword);
+                    startPollingReset(invoiceId, workerPhone, newPassword);
                 } else {
                     throw new Error();
                 }
@@ -445,7 +459,7 @@
             }
         }
 
-        function startPollingReset(invoiceId, phone, newPassword) {
+        function startPollingReset(invoiceId, workerPhone, newPassword) {
             let pollCount = 0;
             const pollTimer = setInterval(async () => {
                 pollCount++;
@@ -456,7 +470,7 @@
 
                     if (state === "COMPLETE" || state === "COMPLETED") {
                         clearInterval(pollTimer);
-                        finalizePinUpdate(phone, newPassword);
+                        finalizePinUpdate(workerPhone, newPassword);
                     } else if (state === "FAILED" || pollCount > 20) {
                         clearInterval(pollTimer);
                         document.getElementById('status').innerText = "Verification failed.";
@@ -467,11 +481,11 @@
             }, 3000);
         }
 
-        async function finalizePinUpdate(phone, newPassword) {
+        async function finalizePinUpdate(workerPhone, newPassword) {
             await fetch(`${API}/reset-pin`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone, newPassword })
+                body: JSON.stringify({ phone: workerPhone, newPassword })
             });
             document.getElementById('status').style.color = "#4CAF50";
             document.getElementById('status').innerText = "PIN updated successfully!";
