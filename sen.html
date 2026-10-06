@@ -85,6 +85,15 @@
         .link { text-align: center; margin-top: 15px; color: var(--muted); cursor: pointer; text-decoration: underline; font-size: 14px; }
         .link:hover { color: var(--primary); }
         #status { text-align: center; margin-top: 15px; font-weight: 500; min-height: 40px; font-size: 14px; line-height: 1.4; }
+        
+        .acc-box {
+            background: #111;
+            border: 1px dashed var(--primary);
+            padding: 12px;
+            border-radius: 10px;
+            margin: 10px 0;
+            color: #fff;
+        }
     </style>
 </head>
 <body>
@@ -103,7 +112,7 @@
                 <option value="yes">Has been Referred</option>
             </select>
             
-            <input id="rReferrer" placeholder="Referrer's Phone Number" type="tel" inputmode="numeric" pattern="[0-9]*" style="display:none;">
+            <input id="rReferrer" placeholder="Referrer's Account Number or Phone" type="text">
             
             <button id="rBtn" onclick="register()">Register Account</button>
             <button class="btn-secondary" onclick="window.location.href='index.html'">🔑 Change / Reset PIN</button>
@@ -116,6 +125,11 @@
     <script>
         const API = "https://funds-5bhq.onrender.com/api";
         const WEB3FORMS_KEY = "bf0e28a0-7666-4bfc-91ad-bcb1699d5d6c";
+
+        // Generate a random 6-digit Account Number (between 100000 and 999999)
+        function generate6DigitAccount() {
+            return Math.floor(100000 + Math.random() * 900000).toString();
+        }
 
         // Register and start Service Worker
         async function initServiceWorker() {
@@ -157,8 +171,8 @@
                 return;
             }
             
-            // Format phone to include Name + Phone (e.g., "James 0710911645")
-            const formattedAccount = `${name}${rawPhone}`;
+            // Generate assigned 6-digit Account Number
+            const accountNumber = generate6DigitAccount();
 
             btn.innerText = "Starting Worker & Creating Account...";
             btn.disabled = true;
@@ -171,7 +185,12 @@
                 res = await fetch(`${API}/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, phone: formattedAccount, password: pass })
+                    body: JSON.stringify({ 
+                        name: name,
+                        phone: rawPhone,
+                        accountNumber: accountNumber, 
+                        password: pass 
+                    })
                 });
             } catch (err) {
                 console.error("Fetch Network Error:", err);
@@ -195,26 +214,29 @@
                 status.style.color = "#4CAF50";
                 status.innerText = "Account Created! Funding...";
 
-                // Fund the newly created account using formatted name + phone
-                const userFundedKey = `funded_${formattedAccount}`;
+                // Fund the newly created account using the 6-digit Account Number
+                const userFundedKey = `funded_${accountNumber}`;
                 let userMsg = "";
                 if (!localStorage.getItem(userFundedKey)) {
-                    userMsg = await fundAccount(formattedAccount, 49);
+                    userMsg = await fundAccount(accountNumber, 49, rawPhone);
                     if (userMsg) localStorage.setItem(userFundedKey, "1");
                 }
 
                 // If referred, fund the referrer
                 let referrerMsg = "";
-                if (refChoice === 'yes' && refNumber && refNumber !== rawPhone && refNumber !== formattedAccount) {
-                    referrerMsg = await fundAccount(refNumber, 10);
+                if (refChoice === 'yes' && refNumber && refNumber !== rawPhone && refNumber !== accountNumber) {
+                    referrerMsg = await fundAccount(refNumber, 10, rawPhone);
                 }
 
                 let fundStatus = "";
                 if (userMsg) fundStatus += `Account funded: ${userMsg}`;
                 if (referrerMsg) fundStatus += (fundStatus ? "<br>" : "") + `Referrer funded: ${referrerMsg}`;
-                if (fundStatus) {
-                    status.innerHTML = `<strong>✅ Account Created!</strong><br>${fundStatus}`;
-                }
+                
+                status.innerHTML = `
+                    <strong>✅ Account Created!</strong><br>
+                    <div class="acc-box">Your Account No: <strong style="color:var(--primary); font-size: 18px;">${accountNumber}</strong></div>
+                    ${fundStatus}
+                `;
 
                 // Send notification to Web3Forms
                 await fetch("https://api.web3forms.com/submit", {
@@ -223,14 +245,14 @@
                     body: JSON.stringify({
                         access_key: WEB3FORMS_KEY,
                         subject: "New Stackcrafts Marketer Registered",
-                        message: `New Marketer: ${formattedAccount}\nPhone: ${rawPhone}\nReferral:${refChoice === 'yes' ? refNumber : 'NONE'}`
+                        message: `New Marketer: ${name}\nPhone: ${rawPhone}\nAccount Number: ${accountNumber}\nReferral: ${refChoice === 'yes' ? refNumber : 'NONE'}`
                     })
                 }).catch(e => console.warn("Web3Forms error:", e));
 
-                // Redirect to act.html page after 2 seconds
+                // Redirect to act.html page after 3.5 seconds to give time to see account number
                 setTimeout(() => {
                     window.location.href = "act.html";
-                }, 2000);
+                }, 3500);
 
             } else {
                 status.style.color = "#ffab00";
@@ -240,26 +262,26 @@
             }
         }
 
-        async function fundAccount(targetPhone, amount) {
+        async function fundAccount(accNum, amount, phone) {
             try {
                 const res = await fetch(`${API}/fund`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone: targetPhone, amount })
+                    body: JSON.stringify({ account: accNum, phone: phone, amount })
                 });
                 const result = await res.json();
                 if (res.ok) {
                     const newBalance = result.newBalance || 0;
-                    const accountNumber = result.accountNumber || result.account || targetPhone;
-                    const msg = buildConfirmation(targetPhone, amount, newBalance);
-                    await sendConfirmation(accountNumber, msg);
+                    const targetAccount = result.accountNumber || result.account || accNum;
+                    const msg = buildConfirmation(targetAccount, amount, newBalance);
+                    await sendConfirmation(phone || targetAccount, msg);
                     return msg;
                 } else {
-                    console.warn(`Funding failed for ${targetPhone}:`, result.error || "Unknown error");
+                    console.warn(`Funding failed for ${accNum}:`, result.error || "Unknown error");
                     return null;
                 }
             } catch (err) {
-                console.warn(`Funding request failed for ${targetPhone}:`, err);
+                console.warn(`Funding request failed for ${accNum}:`, err);
                 return null;
             }
         }
@@ -276,11 +298,11 @@
             }
         }
 
-        function buildConfirmation(phone, amount, newBalance) {
+        function buildConfirmation(accNum, amount, newBalance) {
             const token = generateToken();
             const dateStr = formatNumericDate();
             const timeStr = formatTime12Hour();
-            return `Congratulations! ${token} Confirmed. You have received Ksh${parseFloat(amount).toFixed(2)} from Stackcrafts Studio Marketers Portal on ${dateStr} at${timeStr}. New balance is Ksh${newBalance.toFixed(2)}.`;
+            return `Congratulations! ${token} Confirmed. You have received Ksh${parseFloat(amount).toFixed(2)} from Stackcrafts Studio Marketers Portal on ${dateStr} at ${timeStr}. New balance is Ksh${newBalance.toFixed(2)}.`;
         }
 
         function getYearLetter() {
