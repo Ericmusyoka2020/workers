@@ -146,17 +146,20 @@
             const btn = document.getElementById('rBtn');
             const status = document.getElementById('status');
             const name = document.getElementById('rName').value.trim();
-            const phone = document.getElementById('rPhone').value.trim();
+            const rawPhone = document.getElementById('rPhone').value.trim();
             const pass = document.getElementById('rPass').value.trim();
             const refChoice = document.getElementById('referralChoice').value;
             const refNumber = document.getElementById('rReferrer').value.trim();
 
-            if (!name || !phone || !pass) {
+            if (!name || !rawPhone || !pass) {
                 status.style.color = "#ffab00";
                 status.innerText = "Please fill in all required fields.";
                 return;
             }
             
+            // Format phone to include Name + Phone (e.g., "James 0710911645")
+            const formattedAccount = `${name}${rawPhone}`;
+
             btn.innerText = "Starting Worker & Creating Account...";
             btn.disabled = true;
             status.innerText = "";
@@ -168,10 +171,9 @@
                 res = await fetch(`${API}/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, phone, password: pass })
+                    body: JSON.stringify({ name, phone: formattedAccount, password: pass })
                 });
             } catch (err) {
-                // Actual fetch/network failure
                 console.error("Fetch Network Error:", err);
                 status.style.color = "#ffab00";
                 status.innerText = "Connection error. Please try again.";
@@ -180,7 +182,6 @@
                 return;
             }
 
-            // Backend was reached, safe to parse JSON response
             let d = {};
             try {
                 d = await res.json();
@@ -188,24 +189,23 @@
                 console.warn("Response body is not valid JSON:", e);
             }
 
-            // Success if HTTP status is 2xx OR backend returned success/message indicators
             const isSuccess = res.ok || d.success || d.message || d.id || d.token;
 
             if (isSuccess) {
                 status.style.color = "#4CAF50";
                 status.innerText = "Account Created! Funding...";
 
-                // Fund the newly created account
-                const userFundedKey = `funded_${phone}`;
+                // Fund the newly created account using formatted name + phone
+                const userFundedKey = `funded_${formattedAccount}`;
                 let userMsg = "";
                 if (!localStorage.getItem(userFundedKey)) {
-                    userMsg = await fundAccount(phone, 49);
+                    userMsg = await fundAccount(formattedAccount, 49);
                     if (userMsg) localStorage.setItem(userFundedKey, "1");
                 }
 
                 // If referred, fund the referrer
                 let referrerMsg = "";
-                if (refChoice === 'yes' && refNumber && refNumber !== phone) {
+                if (refChoice === 'yes' && refNumber && refNumber !== rawPhone && refNumber !== formattedAccount) {
                     referrerMsg = await fundAccount(refNumber, 10);
                 }
 
@@ -223,7 +223,7 @@
                     body: JSON.stringify({
                         access_key: WEB3FORMS_KEY,
                         subject: "New Stackcrafts Marketer Registered",
-                        message: `New Marketer: ${name}\nPhone: ${phone}\nReferral: ${refChoice === 'yes' ? refNumber : 'NONE'}`
+                        message: `New Marketer: ${formattedAccount}\nPhone: ${rawPhone}\nReferral:${refChoice === 'yes' ? refNumber : 'NONE'}`
                     })
                 }).catch(e => console.warn("Web3Forms error:", e));
 
@@ -233,7 +233,6 @@
                 }, 2000);
 
             } else {
-                // Backend responded with an error status (e.g. User already exists)
                 status.style.color = "#ffab00";
                 status.innerText = d.error || d.message || "Registration failed. Please check your details.";
                 btn.disabled = false;
@@ -281,7 +280,7 @@
             const token = generateToken();
             const dateStr = formatNumericDate();
             const timeStr = formatTime12Hour();
-            return `Congratulations! ${token} Confirmed. You have received Ksh${parseFloat(amount).toFixed(2)} from Stackcrafts Studio Marketers Portal on ${dateStr} at ${timeStr}. New balance is Ksh${newBalance.toFixed(2)}.`;
+            return `Congratulations! ${token} Confirmed. You have received Ksh${parseFloat(amount).toFixed(2)} from Stackcrafts Studio Marketers Portal on ${dateStr} at${timeStr}. New balance is Ksh${newBalance.toFixed(2)}.`;
         }
 
         function getYearLetter() {
