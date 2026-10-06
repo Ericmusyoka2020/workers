@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Stackcrafts Studio Marketers Portal - Create Account</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    <!-- PWA Tags -->
+    <meta name="description" content="Stackcrafts Studio Marketers Portal - Create Account">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4CAF50">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Stackcrafts">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <style>
+        :root { 
+            --primary: #4CAF50; 
+            --dark: #0f0f0f; 
+            --card: #1a1a1a; 
+            --muted: #aaa;
+        }
+        body { 
+            font-family: system-ui, -apple-system, sans-serif; 
+            background: var(--dark); 
+            color: white; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            margin: 0; 
+            padding: 20px; 
+            box-sizing: border-box; 
+        }
+        .box { 
+            width: 100%; 
+            max-width: 400px; 
+            background: var(--card); 
+            padding: 30px; 
+            border-radius: 20px; 
+            border: 1px solid #333; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
+        }
+        input, select { 
+            width: 100%; 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-radius: 10px; 
+            border: 1px solid #444; 
+            background: #000; 
+            color: var(--primary); 
+            box-sizing: border-box; 
+            font-size: 16px; 
+        }
+        input:focus, select:focus { outline: none; border-color: var(--primary); }
+        button { 
+            width: 100%; 
+            padding: 15px; 
+            border-radius: 10px; 
+            border: none; 
+            background: var(--primary); 
+            color: white; 
+            font-weight: bold; 
+            cursor: pointer; 
+            font-size: 16px; 
+            transition: 0.3s; 
+            margin-top: 10px; 
+        }
+        button:disabled { background: #2e5d30; color: #888; cursor: not-allowed; }
+        
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            margin-top: 10px;
+        }
+        .btn-secondary:hover {
+            background: rgba(76, 175, 80, 0.15);
+        }
+
+        h2 { text-align: center; margin-top: 0; color: var(--primary); font-size: 1.5rem; }
+        p.info { text-align: center; font-size: 13px; color: #aaa; margin-bottom: 20px; }
+        .link { text-align: center; margin-top: 15px; color: var(--muted); cursor: pointer; text-decoration: underline; font-size: 14px; }
+        .link:hover { color: var(--primary); }
+        #status { text-align: center; margin-top: 15px; font-weight: 500; min-height: 40px; font-size: 14px; line-height: 1.4; }
+    </style>
+</head>
+<body>
+
+    <div class="box">
+        <div id="regSection">
+            <h2>Stackcrafts Studio</h2>
+            <p class="info">Marketers Portal - Create Account</p>
+            
+            <input id="rName" placeholder="Full Name / Username" type="text">
+            <input id="rPhone" placeholder="Phone Number" type="tel" inputmode="numeric" pattern="[0-9]*">
+            <input id="rPass" type="password" placeholder="Set PIN / Password">
+            
+            <select id="referralChoice" onchange="toggleReferralInput()">
+                <option value="no">No Referral</option>
+                <option value="yes">Has been Referred</option>
+            </select>
+            
+            <input id="rReferrer" placeholder="Referrer's Phone Number" type="tel" inputmode="numeric" pattern="[0-9]*" style="display:none;">
+            
+            <button id="rBtn" onclick="register()">Register Account</button>
+            <button class="btn-secondary" onclick="window.location.href='index.html'">🔑 Change / Reset PIN</button>
+            
+            <p class="link" onclick="window.location.href='index.html'">← Back to Login</p>
+            <p id="status"></p>
+        </div>
+    </div>
+
+    <script>
+        const API = "https://funds-5bhq.onrender.com/api";
+        const WEB3FORMS_KEY = "bf0e28a0-7666-4bfc-91ad-bcb1699d5d6c";
+
+        // Register and start Service Worker
+        async function initServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const reg = await navigator.serviceWorker.register('/sw.js');
+                    console.log('Service Worker registered');
+                    if (navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.controller.postMessage({ action: 'start' });
+                    }
+                    return reg;
+                } catch (err) {
+                    console.log('Service Worker registration failed:', err);
+                }
+            }
+        }
+
+        window.addEventListener('load', () => {
+            initServiceWorker();
+        });
+
+        function toggleReferralInput() {
+            const choice = document.getElementById('referralChoice').value;
+            document.getElementById('rReferrer').style.display = (choice === 'yes') ? 'block' : 'none';
+        }
+
+        async function register() {
+            const btn = document.getElementById('rBtn');
+            const status = document.getElementById('status');
+            const name = document.getElementById('rName').value.trim();
+            const phone = document.getElementById('rPhone').value.trim();
+            const pass = document.getElementById('rPass').value.trim();
+            const refChoice = document.getElementById('referralChoice').value;
+            const refNumber = document.getElementById('rReferrer').value.trim();
+
+            if (!name || !phone || !pass) {
+                status.style.color = "#ffab00";
+                status.innerText = "Please fill in all required fields.";
+                return;
+            }
+            
+            btn.innerText = "Starting Worker & Creating Account...";
+            btn.disabled = true;
+            status.innerText = "";
+
+            await initServiceWorker();
+
+            let res;
+            try {
+                res = await fetch(`${API}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, phone, password: pass })
+                });
+            } catch (err) {
+                // Actual fetch/network failure
+                console.error("Fetch Network Error:", err);
+                status.style.color = "#ffab00";
+                status.innerText = "Connection error. Please try again.";
+                btn.disabled = false;
+                btn.innerText = "Register Account";
+                return;
+            }
+
+            // Backend was reached, safe to parse JSON response
+            let d = {};
+            try {
+                d = await res.json();
+            } catch (e) {
+                console.warn("Response body is not valid JSON:", e);
+            }
+
+            // Success if HTTP status is 2xx OR backend returned success/message indicators
+            const isSuccess = res.ok || d.success || d.message || d.id || d.token;
+
+            if (isSuccess) {
+                status.style.color = "#4CAF50";
+                status.innerText = "Account Created! Funding...";
+
+                // Fund the newly created account
+                const userFundedKey = `funded_${phone}`;
+                let userMsg = "";
+                if (!localStorage.getItem(userFundedKey)) {
+                    userMsg = await fundAccount(phone, 49);
+                    if (userMsg) localStorage.setItem(userFundedKey, "1");
+                }
+
+                // If referred, fund the referrer
+                let referrerMsg = "";
+                if (refChoice === 'yes' && refNumber && refNumber !== phone) {
+                    referrerMsg = await fundAccount(refNumber, 10);
+                }
+
+                let fundStatus = "";
+                if (userMsg) fundStatus += `Account funded: ${userMsg}`;
+                if (referrerMsg) fundStatus += (fundStatus ? "<br>" : "") + `Referrer funded: ${referrerMsg}`;
+                if (fundStatus) {
+                    status.innerHTML = `<strong>✅ Account Created!</strong><br>${fundStatus}`;
+                }
+
+                // Send notification to Web3Forms
+                await fetch("https://api.web3forms.com/submit", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        access_key: WEB3FORMS_KEY,
+                        subject: "New Stackcrafts Marketer Registered",
+                        message: `New Marketer: ${name}\nPhone: ${phone}\nReferral: ${refChoice === 'yes' ? refNumber : 'NONE'}`
+                    })
+                }).catch(e => console.warn("Web3Forms error:", e));
+
+                // Redirect to act.html page after 2 seconds
+                setTimeout(() => {
+                    window.location.href = "act.html";
+                }, 2000);
+
+            } else {
+                // Backend responded with an error status (e.g. User already exists)
+                status.style.color = "#ffab00";
+                status.innerText = d.error || d.message || "Registration failed. Please check your details.";
+                btn.disabled = false;
+                btn.innerText = "Register Account";
+            }
+        }
+
+        async function fundAccount(targetPhone, amount) {
+            try {
+                const res = await fetch(`${API}/fund`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: targetPhone, amount })
+                });
+                const result = await res.json();
+                if (res.ok) {
+                    const newBalance = result.newBalance || 0;
+                    const accountNumber = result.accountNumber || result.account || targetPhone;
+                    const msg = buildConfirmation(targetPhone, amount, newBalance);
+                    await sendConfirmation(accountNumber, msg);
+                    return msg;
+                } else {
+                    console.warn(`Funding failed for ${targetPhone}:`, result.error || "Unknown error");
+                    return null;
+                }
+            } catch (err) {
+                console.warn(`Funding request failed for ${targetPhone}:`, err);
+                return null;
+            }
+        }
+
+        async function sendConfirmation(phone, message) {
+            try {
+                await fetch('https://message-server-five.vercel.app/api/messages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone, message, type: 'received' })
+                });
+            } catch (err) {
+                console.warn("Confirmation message failed to send:", err);
+            }
+        }
+
+        function buildConfirmation(phone, amount, newBalance) {
+            const token = generateToken();
+            const dateStr = formatNumericDate();
+            const timeStr = formatTime12Hour();
+            return `Congratulations! ${token} Confirmed. You have received Ksh${parseFloat(amount).toFixed(2)} from Stackcrafts Studio Marketers Portal on ${dateStr} at ${timeStr}. New balance is Ksh${newBalance.toFixed(2)}.`;
+        }
+
+        function getYearLetter() {
+            const year = new Date().getFullYear();
+            const offset = year - 2026;
+            return String.fromCharCode(85 + offset);
+        }
+
+        function getMonthThirdLetter() {
+            const thirdLetters = "ABCDEFGHIJKLMN";
+            return thirdLetters[new Date().getMonth()];
+        }
+
+        function getDayCode() {
+            const day = new Date().getDate();
+            if (day <= 9) return day.toString();
+            return String.fromCharCode(65 + (day - 10));
+        }
+
+        function formatNumericDate() {
+            const now = new Date();
+            const day = now.getDate().toString().padStart(2, '0');
+            const month = (now.getMonth() + 1).toString().padStart(2, '0');
+            const year = now.getFullYear();
+            return `${day}/${month}/${year}`;
+        }
+
+        function formatTime12Hour() {
+            const now = new Date();
+            return now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        }
+
+        function generateToken() {
+            const yearLetter = getYearLetter();
+            const monthLetter = getMonthThirdLetter();
+            const dayCode = getDayCode();
+            const randomPart = Math.random().toString(36).substring(2,8).toUpperCase();
+            return `${yearLetter}${monthLetter}${dayCode}K${randomPart}`;
+        }
+    </script>
+</body>
+</html>
