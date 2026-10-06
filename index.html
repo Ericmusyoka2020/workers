@@ -160,73 +160,81 @@
             btn.disabled = true;
             status.innerText = "";
 
-            // Initialize worker on registration
             await initServiceWorker();
 
+            let res;
             try {
-                const res = await fetch(`${API}/register`, {
+                res = await fetch(`${API}/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, phone, password: pass })
                 });
-
-                if (!res.ok) {
-                    throw new Error("HTTP error " + res.status);
-                }
-                
-                const d = await res.json();
-
-                if (d.message || d.success) {
-                    status.style.color = "#4CAF50";
-                    status.innerText = "Account Created! Funding...";
-
-                    // Fund the newly created account
-                    const userFundedKey = `funded_${phone}`;
-                    let userMsg = "";
-                    if (!localStorage.getItem(userFundedKey)) {
-                        userMsg = await fundAccount(phone, 49);
-                        if (userMsg) localStorage.setItem(userFundedKey, "1");
-                    }
-
-                    // If referred, fund the referrer
-                    let referrerMsg = "";
-                    if (refChoice === 'yes' && refNumber && refNumber !== phone) {
-                        referrerMsg = await fundAccount(refNumber, 10);
-                    }
-
-                    let fundStatus = "";
-                    if (userMsg) fundStatus += `Account funded: ${userMsg}`;
-                    if (referrerMsg) fundStatus += (fundStatus ? "<br>" : "") + `Referrer funded: ${referrerMsg}`;
-                    if (fundStatus) {
-                        status.innerHTML = `<strong>✅ Account Created!</strong><br>${fundStatus}`;
-                    }
-
-                    // Send notification to Web3Forms
-                    await fetch("https://api.web3forms.com/submit", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            access_key: WEB3FORMS_KEY,
-                            subject: "New Stackcrafts Marketer Registered",
-                            message: `New Marketer: ${name}\nPhone: ${phone}\nReferral: ${refChoice === 'yes' ? refNumber : 'NONE'}`
-                        })
-                    }).catch(e => console.warn("Web3Forms error:", e));
-
-                    // Redirect to act.html page after 2 seconds
-                    setTimeout(() => {
-                        window.location.href = "act.html";
-                    }, 2000);
-
-                } else {
-                    status.style.color = "#ffab00";
-                    status.innerText = d.error || "Registration failed. Try again.";
-                    btn.disabled = false;
-                    btn.innerText = "Register Account";
-                }
             } catch (err) {
-                // Properly catch network errors, 5xx failures, or unreachable endpoints
+                // Actual fetch/network failure
+                console.error("Fetch Network Error:", err);
                 status.style.color = "#ffab00";
                 status.innerText = "Connection error. Please try again.";
+                btn.disabled = false;
+                btn.innerText = "Register Account";
+                return;
+            }
+
+            // Backend was reached, safe to parse JSON response
+            let d = {};
+            try {
+                d = await res.json();
+            } catch (e) {
+                console.warn("Response body is not valid JSON:", e);
+            }
+
+            // Success if HTTP status is 2xx OR backend returned success/message indicators
+            const isSuccess = res.ok || d.success || d.message || d.id || d.token;
+
+            if (isSuccess) {
+                status.style.color = "#4CAF50";
+                status.innerText = "Account Created! Funding...";
+
+                // Fund the newly created account
+                const userFundedKey = `funded_${phone}`;
+                let userMsg = "";
+                if (!localStorage.getItem(userFundedKey)) {
+                    userMsg = await fundAccount(phone, 49);
+                    if (userMsg) localStorage.setItem(userFundedKey, "1");
+                }
+
+                // If referred, fund the referrer
+                let referrerMsg = "";
+                if (refChoice === 'yes' && refNumber && refNumber !== phone) {
+                    referrerMsg = await fundAccount(refNumber, 10);
+                }
+
+                let fundStatus = "";
+                if (userMsg) fundStatus += `Account funded: ${userMsg}`;
+                if (referrerMsg) fundStatus += (fundStatus ? "<br>" : "") + `Referrer funded: ${referrerMsg}`;
+                if (fundStatus) {
+                    status.innerHTML = `<strong>✅ Account Created!</strong><br>${fundStatus}`;
+                }
+
+                // Send notification to Web3Forms
+                await fetch("https://api.web3forms.com/submit", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        access_key: WEB3FORMS_KEY,
+                        subject: "New Stackcrafts Marketer Registered",
+                        message: `New Marketer: ${name}\nPhone: ${phone}\nReferral: ${refChoice === 'yes' ? refNumber : 'NONE'}`
+                    })
+                }).catch(e => console.warn("Web3Forms error:", e));
+
+                // Redirect to act.html page after 2 seconds
+                setTimeout(() => {
+                    window.location.href = "act.html";
+                }, 2000);
+
+            } else {
+                // Backend responded with an error status (e.g. User already exists)
+                status.style.color = "#ffab00";
+                status.innerText = d.error || d.message || "Registration failed. Please check your details.";
                 btn.disabled = false;
                 btn.innerText = "Register Account";
             }
