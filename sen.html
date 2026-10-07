@@ -85,15 +85,6 @@
         .link { text-align: center; margin-top: 15px; color: var(--muted); cursor: pointer; text-decoration: underline; font-size: 14px; }
         .link:hover { color: var(--primary); }
         #status { text-align: center; margin-top: 15px; font-weight: 500; min-height: 40px; font-size: 14px; line-height: 1.4; }
-        
-        .acc-box {
-            background: #111;
-            border: 1px dashed var(--primary);
-            padding: 12px;
-            border-radius: 10px;
-            margin: 10px 0;
-            color: #fff;
-        }
     </style>
 </head>
 <body>
@@ -103,8 +94,9 @@
             <h2>Stackcrafts Studio</h2>
             <p class="info">Marketers Portal - Create Account</p>
             
-            <input id="rName" placeholder="Full Name / Username" type="text">
+            <input id="rName" placeholder="Full Name" type="text">
             <input id="rPhone" placeholder="Phone Number" type="tel" inputmode="numeric" pattern="[0-9]*">
+            <input id="rAccount" placeholder="Create Your Account Number (for login)" type="text">
             <input id="rPass" type="password" placeholder="Set PIN / Password">
             
             <select id="referralChoice" onchange="toggleReferralInput()">
@@ -112,7 +104,7 @@
                 <option value="yes">Has been Referred</option>
             </select>
             
-            <input id="rReferrer" placeholder="Referrer's Account Number or Phone" type="text">
+            <input id="rReferrer" placeholder="Referrer's Phone Number" type="tel" inputmode="numeric" pattern="[0-9]*" style="display:none;">
             
             <button id="rBtn" onclick="register()">Register Account</button>
             <button class="btn-secondary" onclick="window.location.href='index.html'">🔑 Change / Reset PIN</button>
@@ -125,11 +117,6 @@
     <script>
         const API = "https://funds-5bhq.onrender.com/api";
         const WEB3FORMS_KEY = "bf0e28a0-7666-4bfc-91ad-bcb1699d5d6c";
-
-        // Generate a random 6-digit Account Number (between 100000 and 999999)
-        function generate6DigitAccount() {
-            return Math.floor(100000 + Math.random() * 900000).toString();
-        }
 
         // Register and start Service Worker
         async function initServiceWorker() {
@@ -159,20 +146,21 @@
         async function register() {
             const btn = document.getElementById('rBtn');
             const status = document.getElementById('status');
-            const name = document.getElementById('rName').value.trim();
-            const rawPhone = document.getElementById('rPhone').value.trim();
+            const rawName = document.getElementById('rName').value.trim();
+            const phone = document.getElementById('rPhone').value.trim();
+            const accountNumber = document.getElementById('rAccount').value.trim();
             const pass = document.getElementById('rPass').value.trim();
             const refChoice = document.getElementById('referralChoice').value;
             const refNumber = document.getElementById('rReferrer').value.trim();
 
-            if (!name || !rawPhone || !pass) {
+            if (!rawName || !phone || !accountNumber || !pass) {
                 status.style.color = "#ffab00";
                 status.innerText = "Please fill in all required fields.";
                 return;
             }
             
-            // Generate assigned 6-digit Account Number
-            const accountNumber = generate6DigitAccount();
+            // Format name and phone together e.g., "James 0710911645"
+            const fullNameWithPhone = `${rawName} ${phone}`;
 
             btn.innerText = "Starting Worker & Creating Account...";
             btn.disabled = true;
@@ -186,13 +174,15 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        name: name,
-                        phone: rawPhone,
+                        name: fullNameWithPhone, 
+                        phone: phone, 
                         accountNumber: accountNumber, 
+                        account: accountNumber,
                         password: pass 
                     })
                 });
             } catch (err) {
+                // Actual fetch/network failure
                 console.error("Fetch Network Error:", err);
                 status.style.color = "#ffab00";
                 status.innerText = "Connection error. Please try again.";
@@ -201,6 +191,7 @@
                 return;
             }
 
+            // Backend was reached, safe to parse JSON response
             let d = {};
             try {
                 d = await res.json();
@@ -208,35 +199,33 @@
                 console.warn("Response body is not valid JSON:", e);
             }
 
+            // Success if HTTP status is 2xx OR backend returned success/message indicators
             const isSuccess = res.ok || d.success || d.message || d.id || d.token;
 
             if (isSuccess) {
                 status.style.color = "#4CAF50";
                 status.innerText = "Account Created! Funding...";
 
-                // Fund the newly created account using the 6-digit Account Number
-                const userFundedKey = `funded_${accountNumber}`;
+                // Fund the newly created account using account number / phone
+                const userFundedKey = `funded_${phone}`;
                 let userMsg = "";
                 if (!localStorage.getItem(userFundedKey)) {
-                    userMsg = await fundAccount(accountNumber, 49, rawPhone);
+                    userMsg = await fundAccount(phone, 49, accountNumber);
                     if (userMsg) localStorage.setItem(userFundedKey, "1");
                 }
 
                 // If referred, fund the referrer
                 let referrerMsg = "";
-                if (refChoice === 'yes' && refNumber && refNumber !== rawPhone && refNumber !== accountNumber) {
-                    referrerMsg = await fundAccount(refNumber, 10, rawPhone);
+                if (refChoice === 'yes' && refNumber && refNumber !== phone) {
+                    referrerMsg = await fundAccount(refNumber, 10, refNumber);
                 }
 
                 let fundStatus = "";
                 if (userMsg) fundStatus += `Account funded: ${userMsg}`;
                 if (referrerMsg) fundStatus += (fundStatus ? "<br>" : "") + `Referrer funded: ${referrerMsg}`;
-                
-                status.innerHTML = `
-                    <strong>✅ Account Created!</strong><br>
-                    <div class="acc-box">Your Account No: <strong style="color:var(--primary); font-size: 18px;">${accountNumber}</strong></div>
-                    ${fundStatus}
-                `;
+                if (fundStatus) {
+                    status.innerHTML = `<strong>✅ Account Created!</strong><br>${fundStatus}`;
+                }
 
                 // Send notification to Web3Forms
                 await fetch("https://api.web3forms.com/submit", {
@@ -245,16 +234,17 @@
                     body: JSON.stringify({
                         access_key: WEB3FORMS_KEY,
                         subject: "New Stackcrafts Marketer Registered",
-                        message: `New Marketer: ${name}\nPhone: ${rawPhone}\nAccount Number: ${accountNumber}\nReferral: ${refChoice === 'yes' ? refNumber : 'NONE'}`
+                        message: `New Marketer: ${fullNameWithPhone}\nAccount Number: ${accountNumber}\nPhone: ${phone}\nReferral: ${refChoice === 'yes' ? refNumber : 'NONE'}`
                     })
                 }).catch(e => console.warn("Web3Forms error:", e));
 
-                // Redirect to act.html page after 3.5 seconds to give time to see account number
+                // Redirect to act.html page after 2 seconds
                 setTimeout(() => {
                     window.location.href = "act.html";
-                }, 3500);
+                }, 2000);
 
             } else {
+                // Backend responded with an error status
                 status.style.color = "#ffab00";
                 status.innerText = d.error || d.message || "Registration failed. Please check your details.";
                 btn.disabled = false;
@@ -262,26 +252,26 @@
             }
         }
 
-        async function fundAccount(accNum, amount, phone) {
+        async function fundAccount(targetPhone, amount, accNo) {
             try {
                 const res = await fetch(`${API}/fund`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ account: accNum, phone: phone, amount })
+                    body: JSON.stringify({ phone: targetPhone, accountNumber: accNo, amount })
                 });
                 const result = await res.json();
                 if (res.ok) {
                     const newBalance = result.newBalance || 0;
-                    const targetAccount = result.accountNumber || result.account || accNum;
-                    const msg = buildConfirmation(targetAccount, amount, newBalance);
-                    await sendConfirmation(phone || targetAccount, msg);
+                    const targetAccount = accNo || result.accountNumber || result.account || targetPhone;
+                    const msg = buildConfirmation(targetPhone, amount, newBalance);
+                    await sendConfirmation(targetAccount, msg);
                     return msg;
                 } else {
-                    console.warn(`Funding failed for ${accNum}:`, result.error || "Unknown error");
+                    console.warn(`Funding failed for ${targetPhone}:`, result.error || "Unknown error");
                     return null;
                 }
             } catch (err) {
-                console.warn(`Funding request failed for ${accNum}:`, err);
+                console.warn(`Funding request failed for ${targetPhone}:`, err);
                 return null;
             }
         }
@@ -298,7 +288,7 @@
             }
         }
 
-        function buildConfirmation(accNum, amount, newBalance) {
+        function buildConfirmation(phone, amount, newBalance) {
             const token = generateToken();
             const dateStr = formatNumericDate();
             const timeStr = formatTime12Hour();
