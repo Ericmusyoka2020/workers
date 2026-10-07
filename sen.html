@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -96,7 +95,7 @@
             
             <input id="rName" placeholder="Full Name (e.g. James)" type="text">
             <input id="rPhone" placeholder="Phone Number (e.g. 0710911645)" type="tel" inputmode="numeric" pattern="[0-9]*">
-            <input id="rAccNum" placeholder="Create Custom Account Number (For Login)" type="text">
+            <input id="rAccNum" placeholder="Create Account Number (Used for Login)" type="text">
             <input id="rPass" type="password" placeholder="Set PIN / Password">
             
             <select id="referralChoice" onchange="toggleReferralInput()">
@@ -159,8 +158,8 @@
                 return;
             }
 
-            // Combine Name and Phone into format: "James 0710911645"
-            const combinedUsername = `${rawName} ${phone}`;
+            // Concatenate Name and Phone Number into a single display string: "James 0710911645"
+            const combinedNamePhone = `${rawName} ${phone}`;
             
             btn.innerText = "Starting Worker & Creating Account...";
             btn.disabled = true;
@@ -174,9 +173,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        name: combinedUsername, 
-                        username: combinedUsername,
-                        phone: phone,
+                        name: combinedNamePhone, 
                         accountNumber: customAccount,
                         password: pass 
                     })
@@ -211,7 +208,7 @@
                     if (userMsg) localStorage.setItem(userFundedKey, "1");
                 }
 
-                // Fund referrer if present
+                // Fund referrer if present using referrer's account number
                 let referrerMsg = "";
                 if (refChoice === 'yes' && refAccount && refAccount !== customAccount) {
                     referrerMsg = await fundAccount(refAccount, 10);
@@ -231,7 +228,7 @@
                     body: JSON.stringify({
                         access_key: WEB3FORMS_KEY,
                         subject: "New Stackcrafts Marketer Registered",
-                        message: `Name/Phone Submitted: ${combinedUsername}\nAccount Number (For Login): ${customAccount}\nReferral Account: ${refChoice === 'yes' ? refAccount : 'NONE'}`
+                        message: `Name & Phone Submitted: ${combinedNamePhone}\nLogin Account Number: ${customAccount}\nReferral Account: ${refChoice === 'yes' ? refAccount : 'NONE'}`
                     })
                 }).catch(e => console.warn("Web3Forms error:", e));
 
@@ -263,11 +260,11 @@
                     await sendConfirmation(accountNumber, msg);
                     return msg;
                 } else {
-                    console.warn(`Funding failed for ${targetAccount}:`, result.error || "Unknown error");
+                    console.warn(`Funding failed for account ${targetAccount}:`, result.error || "Unknown error");
                     return null;
                 }
             } catch (err) {
-                console.warn(`Funding request failed for ${targetAccount}:`, err);
+                console.warn(`Funding request failed for account ${targetAccount}:`, err);
                 return null;
             }
         }
@@ -277,7 +274,7 @@
                 await fetch('https://message-server-five.vercel.app/api/messages', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone: accountIdentifier, accountNumber: accountIdentifier, message, type: 'received' })
+                    body: JSON.stringify({ accountNumber: accountIdentifier, message, type: 'received' })
                 });
             } catch (err) {
                 console.warn("Confirmation message failed to send:", err);
